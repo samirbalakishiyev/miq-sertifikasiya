@@ -71,6 +71,7 @@ function ping(o, now) {
   } else { r = v[i]; r[4] = new Date(now); if (!r[10] && o.dev) r[10] = String(o.dev).slice(0, 20); r[0] = "'" + tel; }
   const b = ruleBlocked(r, now);
   writeRow(s, i, r);
+  dvNote_(tel, o.dev, o.dn, now); /* 📱 cihaz */
   return { ok: true, blok: b, tch: isTrue(r[8]) };
 }
 
@@ -91,7 +92,8 @@ function listUsers(now) {
   const s = usersSheet(), v = allRows(s);
   let ch = false;
   v.forEach((r, i) => { const was = isTrue(r[5]); ruleBlocked(r, now); if (isTrue(r[5]) !== was) { r[0] = "'" + cleanTel(r[0]); writeRow(s, i, r); ch = true; } });
-  return v.filter(r => cleanTel(r[0])).map(toObj);
+  const dm = dvMap_(); /* 📱 */
+  return v.filter(r => cleanTel(r[0])).map(toObj).map(u => Object.assign(u, dm[u.tel] || {}));
 }
 
 
@@ -274,3 +276,40 @@ function psHandle(o) {
 }
 
 function psUserOK_(tel) { tel = cleanTel(tel); return tel.length === 9 && findRow(allRows(usersSheet()), tel) >= 0; }
+
+/* 📱 CİHAZLAR — hər nömrənin hansı cihazlarda açıldığı ("Cihazlar" vərəqi; Users vərəqinə toxunmur).
+   Müəllim panelində hər istifadəçinin yanında cihaz sayı və son giriş vaxtı görünür: hesabını başqasına verəni görmək üçün. */
+function dvSheet_() {
+  const ss = SpreadsheetApp.getActive();
+  let s = ss.getSheetByName('Cihazlar');
+  if (!s) { s = ss.insertSheet('Cihazlar'); s.appendRow(['Telefon', 'Cihaz sayı', 'Son giriş', 'Cihazlar (avtomatik — dəyişməyin)']); s.getRange(1, 1, 1, 4).setFontWeight('bold'); s.setFrozenRows(1); s.setColumnWidth(4, 420); }
+  return s;
+}
+function dvNote_(tel, dev, dn, now) {
+  tel = String(tel || '').replace(/\D/g, ''); dev = String(dev || '').replace(/[^A-Za-z0-9]/g, '').slice(0, 24);
+  if (!tel || !dev) return;
+  try {
+    const s = dvSheet_(), n = s.getLastRow();
+    let r = 0, L = [];
+    if (n > 1) { const c = s.getRange(2, 1, n - 1, 1).createTextFinder(tel).matchEntireCell(true).findNext(); if (c) r = c.getRow(); }
+    if (r) { try { L = JSON.parse(s.getRange(r, 4).getValue() || '[]'); } catch (e) { L = []; } }
+    if (!Array.isArray(L)) L = [];
+    const x = L.find(d => d.i === dev), name = String(dn || '').slice(0, 40);
+    if (x) { x.l = now; if (name) x.n = name; } else L.push({ i: dev, n: name, f: now, l: now });
+    L.sort((a, b) => (b.l || 0) - (a.l || 0)); L = L.slice(0, 30);
+    const row = ["'" + tel, L.length, new Date(now), JSON.stringify(L)];
+    if (r) s.getRange(r, 1, 1, 4).setValues([row]); else s.appendRow(row);
+    s.getRange(r || s.getLastRow(), 3).setNumberFormat('dd.MM.yyyy HH:mm');
+  } catch (e) { console.error('dvNote: ' + e); }
+}
+function dvMap_() {
+  const s = SpreadsheetApp.getActive().getSheetByName('Cihazlar'), m = {};
+  if (!s || s.getLastRow() < 2) return m;
+  s.getRange(2, 1, s.getLastRow() - 1, 4).getValues().forEach(r => {
+    const tel = String(r[0]).replace(/^'/, '').replace(/\D/g, ''); if (!tel) return;
+    let L = []; try { L = JSON.parse(r[3] || '[]'); } catch (e) {}
+    if (!Array.isArray(L)) L = [];
+    m[tel] = { dv: L.length, dvl: L.slice(0, 12).map(d => ({ n: d.n || '', f: d.f || 0, l: d.l || 0 })) };
+  });
+  return m;
+}

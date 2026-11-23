@@ -692,6 +692,19 @@ const LK={reg:"miq-reg",blok:"miq-blok",tkey:"miq-tkey",dev:"miq-dev",demo:"miq-
 const DEV=(()=>{let d=lsGet(LK.dev,"");if(!d){const m=document.cookie.match(/(?:^|; )miqdev=([A-Z0-9]+)/);d=m?m[1]:""}
   if(!d){const A="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";crypto.getRandomValues(new Uint8Array(10)).forEach(x=>d+=A[x%A.length])}
   lsSet(LK.dev,d);try{document.cookie="miqdev="+d+";max-age=315360000;path=/;SameSite=Lax"}catch(e){}return d})();
+/* 📱 cihaz: hər brauzer üçün bir dəfə yaranan ID + cihazın adı (müəllim panelində neçə cihazda açıldığı görünsün) */
+const sbDev=()=>DEV;
+const sbDevName=()=>{const u=navigator.userAgent||'';let os='Kompüter';
+  if(/iPad/.test(u)||(/Macintosh/.test(u)&&navigator.maxTouchPoints>1))os='iPad';else if(/iPhone|iPod/.test(u))os='iPhone';
+  else if(/Android/.test(u)){const m=u.match(/Android[\d.\s]*;\s*([^;)]+)/),md=m?m[1].replace(/\s*Build.*$/,'').trim():'';os='Android'+(md&&!/^(K|wv|Linux|Mobile)$/i.test(md)?' '+md:'')}
+  else if(/Windows/.test(u))os='Windows';else if(/CrOS/.test(u))os='Chromebook';else if(/Macintosh/.test(u))os='Mac';else if(/Linux/.test(u))os='Linux';
+  const br=/EdgA?\/|EdgiOS/.test(u)?'Edge':/OPR\/|OPiOS/.test(u)?'Opera':/SamsungBrowser/.test(u)?'Samsung':/YaBrowser/.test(u)?'Yandex':/CriOS|Chrome\//.test(u)?'Chrome':/FxiOS|Firefox\//.test(u)?'Firefox':/Safari\//.test(u)?'Safari':'';
+  let sa=false;try{sa=window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true}catch(e){}
+  return (os+(br?' · '+br:'')+(sa?' · ana ekran':'')).slice(0,40)};
+const sbDT=t=>{if(!t)return '—';const d=new Date(+t||t);if(isNaN(d))return String(t);const z=x=>String(x).padStart(2,'0');return z(d.getDate())+'.'+z(d.getMonth()+1)+'.'+d.getFullYear()+' '+z(d.getHours())+':'+z(d.getMinutes())};
+const sbDevHTML=u=>{const n=+(u&&u.dv)||0;if(!n)return '';const e=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const L=(u.dvl||[]).map(x=>`<li>${e(x.n||'Naməlum cihaz')} — ilk: ${sbDT(x.f)}, son: ${sbDT(x.l)}</li>`).join('');
+  return ` · <details style="display:inline-block;vertical-align:top" onclick="event.stopPropagation()"><summary style="cursor:pointer;display:inline;font-weight:800;${n>=3?'color:#C62828':''}">📱 ${n} cihaz${n>=3?' ⚠️':''}</summary><ul style="margin:4px 0 2px 16px;padding:0;font-size:12.5px;line-height:1.45">${L}</ul></details>`};
 let REG=lsGet(LK.reg,null);
 
 /* ☁️ İRƏLİLƏYİŞ SİNXRONU — şagirdin işlədikləri telefon nömrəsinə bağlı Google Cədvəldə ("İrəliləyiş" vərəqi) saxlanır.
@@ -840,7 +853,7 @@ function regSubmit(){
 /* ---------- status check ---------- */
 let BLOK=!!lsGet(LK.blok,false);
 async function ping(){if(!REG||isTeacher())return;
-  try{const o=await api({a:"ping",tel:REG.tel,ad:REG.ad,soyad:REG.soyad,qeyd:REG.at,dev:DEV});
+  try{const o=await api({a:"ping",tel:REG.tel,ad:REG.ad,soyad:REG.soyad,qeyd:REG.at,dev:DEV,dn:sbDevName()});
     if(o&&o.ok){const was=BLOK;BLOK=!!o.blok&&!o.tch;lsSet(LK.blok,BLOK);if(was!==BLOK){stack.length=0;go(home)}}}catch(e){}}
 /* ---------- blocked screen (same text as My New Vocabulary) ---------- */
 function blockScreen(){
@@ -885,7 +898,7 @@ async function tUsers(reload){
    <p style="margin:0 0 8px;font-weight:800;color:var(--muted)">Göstərilir: ${rows.length}</p>
    <div class="tlist">${rows.map(u=>{const t=esc(u.tel),pd=isPaid(u)&&!u.tch;return `<div class="titem${u.blok&&!u.tch?" isblk":""}">
      <div class="nm2${pd?" paid":""}">${pd?"💳 ":""}${esc(u.ad+" "+u.soyad)}</div><div>${uTags(u)}</div>
-     <small>📱 +994 ${fmtTel(u.tel)}</small><small>Qeydiyyat: ${dOnly(u.qeyd)} · Son giriş: ${dOnly(u.son)}</small>
+     <small>📱 +994 ${fmtTel(u.tel)}</small><small>Qeydiyyat: ${dOnly(u.qeyd)} · Son giriş: ${sbDT(u.son)}${sbDevHTML(u)}</small>
      ${TU.ren===u.tel?`<div class="tren"><label>Ad<input class="inp" id="ra-${t}" value="${esc(u.ad)}"></label><label>Soyad<input class="inp" id="rs-${t}" value="${esc(u.soyad)}"></label>
        <div class="full row"><button class="tb pay" data-a="ren" data-t="${t}">Yadda saxla</button><button class="tb" data-a="renx" data-t="${t}">Ləğv et</button></div></div>`:""}
      <div class="tbtns">${u.tch?"":`<button class="tb ${pd?"unpay":"pay"}" data-a="pay" data-t="${t}" data-v="${pd?0:1}">${pd?"↺ Ödənişi geri al":"💳 Ödəniş edib"}</button>`}
