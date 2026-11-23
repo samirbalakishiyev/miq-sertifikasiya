@@ -180,6 +180,13 @@ function doPost(e) {
       if (String(o.p || '').trim().toUpperCase() !== ADMIN_PASS.trim().toUpperCase()) { c.put('tl_fail', String(n + 1), 900); return out({ ok: false, error: 'pass' }); }
       c.remove('tl_fail'); return out({ ok: true, key: panelKey() });
     }
+    if (o.a === 'meren') {                                   /* şagird öz adını düzəldir (nömrəni yox) */
+      const s = usersSheet(), v = allRows(s), i = findRow(v, cleanTel(o.tel));
+      if (i < 0) return out({ ok: false, error: 'tel' });
+      const r = v[i]; if (r[10] && String(r[10]) !== String(o.dev || '')) return out({ ok: false, error: 'dev' });
+      r[0] = "'" + cleanTel(r[0]); r[1] = String(o.ad || r[1]).slice(0, 60); r[2] = String(o.soyad || r[2]).slice(0, 60); writeRow(s, i, r);
+      return out({ ok: true });
+    }
     if (o.a === 'fb') return out(fbAdd(o, now));            /* şagirdin rəyi */
     if (o.a === 'fbmine') {                                  /* şagird: öz rəyləri və müəllimin cavabları */
       const tel = cleanTel(o.tel); if (!tel) return out({ ok: true, rows: [] });
@@ -195,7 +202,9 @@ function doPost(e) {
     if (o.a === 'fbset') return out(fbSet(o, now));
     if (o.a === 'users') return out({ ok: true, rows: listUsers(now) });
     if (['pay', 'block', 'tch', 'ren', 'del'].indexOf(o.a) >= 0) return out(setUser(o, now));
-    if (o.a === 'cfg') { const c = cfgGet(); if (typeof o.link === 'string') c.link = o.link.slice(0, 300); cfgSet(c); return out({ ok: true }); }
+    if (o.a === 'cfg') { const c = cfgGet(); if (typeof o.link === 'string') c.link = o.link.slice(0, 300);
+      if (o.note !== undefined) c.note = o.note ? { on: o.note.on !== false, t: String(o.note.t || '').slice(0, 40), x: String(o.note.x || '').slice(0, 600), at: +o.note.at || now } : null;
+      cfgSet(c); return out({ ok: true }); }
     if (o.a === 'vocab') { const t = String(o.vocab || ''); JSON.parse(t); vocabSet(t); const c = cfgGet(); c.ver = now; cfgSet(c); return out({ ok: true, ver: now }); }
     return out({ ok: false, error: 'a' });
   } catch (x) { return out({ ok: false, error: String(x && x.message || x) }); }
