@@ -94,6 +94,47 @@ function listUsers(now) {
   return v.filter(r => cleanTel(r[0])).map(toObj);
 }
 
+
+/* ✍️ Təklif və rəylər: "Rəylər" vərəqi. Status: Yeni / Oxundu / Cavablandı / Arxiv.
+   "Şagird gizlədib" = şagird öz tərəfində silib (müəllim yenə görür). ID = telefon|vaxt. */
+const FL = ['Tarix', 'Telefon', 'Ad', 'Soyad', 'Rəy', 'Status', 'Cavab', 'Cavab tarixi', 'Şagird gizlədib', 'ID'];
+function fbSheet() {
+  const ss = SpreadsheetApp.getActive();
+  let s = ss.getSheetByName('Rəylər');
+  if (!s) { s = ss.insertSheet('Rəylər'); s.appendRow(FL); s.getRange(1, 1, 1, FL.length).setFontWeight('bold'); s.setFrozenRows(1); s.setColumnWidth(5, 420); s.setColumnWidth(7, 360); }
+  return s;
+}
+function fbAll() {
+  const s = fbSheet(), n = s.getLastRow() - 1;
+  return { s, v: n > 0 ? s.getRange(2, 1, n, FL.length).getValues() : [] };
+}
+const fbObj = r => ({ id: String(r[9]), at: ms(r[0]), tel: cleanTel(r[1]), ad: String(r[2]), soyad: String(r[3]), x: String(r[4]), st: String(r[5] || 'Yeni'), rep: String(r[6] || ''), rat: ms(r[7]), hid: isTrue(r[8]) });
+function fbRows() { return fbAll().v.filter(r => r[9] !== '').map(fbObj); }
+function fbAdd(o, now) {
+  const x = String(o.x || '').trim().slice(0, 2000), tel = cleanTel(o.tel);
+  if (!x) return { ok: false, error: 'x' };
+  const at = +o.at && +o.at <= now ? +o.at : now, id = tel + '|' + at;
+  if (fbRows().some(f => f.id === id)) return { ok: true, id };
+  const s = fbSheet();
+  s.appendRow([new Date(at), "'" + tel, String(o.ad || '').slice(0, 60), String(o.soyad || '').slice(0, 60), x, 'Yeni', '', '', false, "'" + id]);
+  s.getRange(s.getLastRow(), 1).setNumberFormat(DF);
+  return { ok: true, id };
+}
+function fbSet(o, now) {
+  const { s, v } = fbAll(), i = v.findIndex(r => String(r[9]) === String(o.id));
+  if (i < 0) return { ok: false, error: 'id' };
+  const row = i + 2;
+  if (o.del) { s.deleteRow(row); return { ok: true }; }
+  if (typeof o.rep === 'string') {
+    const t = o.rep.trim().slice(0, 2000);
+    s.getRange(row, 6, 1, 3).setValues([[t ? 'Cavablandı' : 'Oxundu', t, t ? new Date(now) : '']]);
+    s.getRange(row, 8).setNumberFormat(DF);
+    return { ok: true };
+  }
+  if (['Yeni', 'Oxundu', 'Cavablandı', 'Arxiv'].indexOf(o.st) >= 0) { s.getRange(row, 6).setValue(o.st); return { ok: true }; }
+  return { ok: false, error: 'st' };
+}
+
 /* tətbiq ayarları və lüğət (S&E redaktoru): "Ayarlar" vərəqində */
 function cfgSheet() {
   const ss = SpreadsheetApp.getActive();
@@ -136,7 +177,19 @@ function doPost(e) {
       if (String(o.p || '').trim().toUpperCase() !== ADMIN_PASS.trim().toUpperCase()) { c.put('tl_fail', String(n + 1), 900); return out({ ok: false, error: 'pass' }); }
       c.remove('tl_fail'); return out({ ok: true, key: panelKey() });
     }
+    if (o.a === 'fb') return out(fbAdd(o, now));            /* şagirdin rəyi */
+    if (o.a === 'fbmine') {                                  /* şagird: öz rəyləri və müəllimin cavabları */
+      const tel = cleanTel(o.tel); if (!tel) return out({ ok: true, rows: [] });
+      return out({ ok: true, rows: fbRows().filter(f => f.tel === tel && !f.hid).map(f => ({ id: f.id, at: f.at, x: f.x, rep: f.rep, rat: f.rat })) });
+    }
+    if (o.a === 'fbhide') {                                  /* şagird öz tərəfində silir: müəllimdə qalır */
+      const { s, v } = fbAll(), i = v.findIndex(r => String(r[9]) === String(o.id) && cleanTel(r[1]) === cleanTel(o.tel));
+      if (i < 0) return out({ ok: false, error: 'id' });
+      s.getRange(i + 2, 9).setValue(true); return out({ ok: true });
+    }
     if (String(o.key || '') !== panelKey()) return out({ ok: false, error: 'key' });
+    if (o.a === 'fbs') return out({ ok: true, rows: fbRows() });
+    if (o.a === 'fbset') return out(fbSet(o, now));
     if (o.a === 'users') return out({ ok: true, rows: listUsers(now) });
     if (['pay', 'block', 'tch', 'ren', 'del'].indexOf(o.a) >= 0) return out(setUser(o, now));
     if (o.a === 'cfg') { const c = cfgGet(); if (typeof o.link === 'string') c.link = o.link.slice(0, 300); cfgSet(c); return out({ ok: true }); }
